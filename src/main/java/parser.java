@@ -43,12 +43,9 @@ public class parser {
         }
         //Thread.sleep(500);
         JsonObject friends = new JsonParser().parse(friends_resp.getContent()).getAsJsonObject();
-        int check=friends.getAsJsonObject("response").get("count").getAsInt();
-        if((check < 1000) && (check > 0)) {
-            return friends.getAsJsonObject("response").getAsJsonArray("items");
-        }
-        else
-            return null;
+
+        return friends.getAsJsonObject("response").getAsJsonArray("items");
+
     }
 
     private static JsonArray getUsers(JsonArray array) throws InterruptedException {
@@ -67,14 +64,14 @@ public class parser {
 
                 if (!is_closed) {
                     JsonObject user = array.get(i).getAsJsonObject();
-                    JsonArray friends=getFriends(user.get("id").getAsInt());
-                    if (friends!=null) {
-                        user.remove("is_closed");
-                        user.remove("can_access_closed");
-                        user.remove("track_code");
-                        user.add("friends", getFriends(user.get("id").getAsInt()));
-                        Users.add(array.get(i).getAsJsonObject());
-                    }
+                    JsonArray friends = getFriends(user.get("id").getAsInt());
+
+                    user.remove("is_closed");
+                    user.remove("can_access_closed");
+                    user.remove("track_code");
+                    user.add("friends", getFriends(user.get("id").getAsInt()));
+                    Users.add(array.get(i).getAsJsonObject());
+
                 }
             }
         }
@@ -101,33 +98,32 @@ public class parser {
             if (!is_closed) {
 
                 JsonArray friends_arr = getFriends(user.get("id").getAsInt());
-                if (friends_arr!=null) {
-                    user.add("friends", friends_arr);
-                    user.remove("is_closed");
-                    user.remove("can_access_closed");
-                    return user;
-                }
+
+                user.add("friends", friends_arr);
+                user.remove("is_closed");
+                user.remove("can_access_closed");
+
             }
         }
-        return null;
+        return user;
     }
 
     private static JsonArray search(int number, String param, String value) throws ClientException {
         ClientResponse search_resp = null;
-        switch (param){
+        switch (param) {
             case ("country"):
-                search_resp = vk.users().search(APP).fields(userFieldList).country(Integer.valueOf(value)).count(number).executeAsRaw();
-            break;
+                search_resp = vk.users().search(APP).fields(userFieldList).country(Integer.valueOf(value)).sort(UsersSort.BY_DATE_REGISTERED).count(number).executeAsRaw();
+                break;
             case ("city"):
                 ClientResponse response = vk.database().getCities(APP, 1).q(value).executeAsRaw();
                 JsonObject City_parse = new JsonParser().parse(response.getContent()).getAsJsonObject();
                 JsonObject arr = City_parse.getAsJsonObject("response").getAsJsonArray("items").get(0).getAsJsonObject();
-                JsonElement id= arr.get("id");
+                JsonElement id = arr.get("id");
                 search_resp = vk.users().search(APP).fields(userFieldList).city(Integer.valueOf(value)).count(number).executeAsRaw();
-            break;
+                break;
             case ("university"):
                 search_resp = vk.users().search(APP).fields(userFieldList).university(Integer.valueOf(value)).count(number).executeAsRaw();
-            break;
+                break;
             case ("birth_year"):
                 search_resp = vk.users().search(APP).fields(userFieldList).birthYear(Integer.valueOf(value)).count(number).executeAsRaw();
                 break;
@@ -154,12 +150,13 @@ public class parser {
 
         JsonArray searching_people = null;
         try {
-            searching_people = search(1,"country","1");
+            searching_people = search(20, "country", "1");
         } catch (ClientException e) {
             e.printStackTrace();
         }
         assert searching_people != null;
         JsonArray first_iter = getUsers(searching_people);
+
 
         result.add(first_iter);
 
@@ -174,24 +171,23 @@ public class parser {
                     List<Integer> yourList = new Gson().fromJson(friends1, listType);
                     JsonArray friends_array = new JsonArray();
                     for (int user_id : yourList) {
-                        JsonObject user=getUserInfo(user_id);
-                        if (user!=null)
-                        friends_array.add(user);
+                        JsonObject user = getUserInfo(user_id);
+                        if (user != null)
+                            friends_array.add(user);
                     }
                     if (friends_array.size() > 0) {
                         result.add(friends_array);
-                        System.out.println("added="+friends_array.size());
+                        System.out.println("added=" + friends_array.size());
                     }
                 }
             }
 
         }
-
         int sum=0;
         for (JsonArray jsonElements : result) {
-            System.out.println(jsonElements.size());
+            //System.out.println(jsonElements.size());
             sum+=jsonElements.size();
-            //System.out.println(jsonElements);
+            System.out.println(jsonElements);
         }
         System.out.println(sum);
 
