@@ -1,5 +1,5 @@
-import com.google.gson.*;
-import com.google.gson.reflect.TypeToken;
+//import com.google.gson.*;
+//import com.google.gson.reflect.TypeToken;
 import com.vk.api.sdk.client.ClientResponse;
 import com.vk.api.sdk.client.TransportClient;
 import com.vk.api.sdk.client.VkApiClient;
@@ -8,6 +8,8 @@ import com.vk.api.sdk.exceptions.ClientException;
 import com.vk.api.sdk.httpclient.HttpTransportClient;
 import com.vk.api.sdk.objects.enums.UsersSort;
 import com.vk.api.sdk.objects.users.Fields;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.lang.reflect.Type;
 import java.util.*;
@@ -18,8 +20,8 @@ public class parser {
     private static VkApiClient vk = new VkApiClient(transportClient);
 
     private static int app_id = 7058737;
-    //private static String access_token = "779d5a5b2c5be69b6d134f734a2fbb51b087520d8aa948680eb021448801cc91ea172e19041c2d7be3e9c";
-    private static String access_token = "6a99b6dce7c59daac6a76e3703ab3b75b6ddc9f4ee569c9ef1173c07cee4638d2c47e9eab2c22753863af";
+    private static String access_token = "779d5a5b2c5be69b6d134f734a2fbb51b087520d8aa948680eb021448801cc91ea172e19041c2d7be3e9c";
+    //private static String access_token = "6a99b6dce7c59daac6a76e3703ab3b75b6ddc9f4ee569c9ef1173c07cee4638d2c47e9eab2c22753863af";
     private static UserActor APP = new UserActor(app_id, access_token);
 
     private static List<Fields> userFieldList = Arrays.asList(
@@ -31,7 +33,7 @@ public class parser {
             Fields.UNIVERSITIES,
             Fields.SCHOOLS);
 
-    private static JsonArray getFriends(int id) throws InterruptedException {
+    private static JSONArray getFriends(int id) throws InterruptedException {
         Thread.sleep(350);
         ClientResponse friends_resp = null;
         try {
@@ -41,37 +43,37 @@ public class parser {
         } catch (ClientException e) {
             e.printStackTrace();
         }
-        JsonObject friends = new JsonParser().parse(friends_resp.getContent()).getAsJsonObject();
-
-        return friends.getAsJsonObject("response").getAsJsonArray("items");
+        assert friends_resp != null;
+        JSONObject friends = new JSONObject(friends_resp.getContent());
+        //System.out.println(friends);
+        return friends.getJSONObject("response").getJSONArray("items");
 
     }
 
-    private static JsonArray getUsers(JsonArray array) throws InterruptedException {
-        int len = array.size();
-        JsonArray Users = new JsonArray();
+    private static JSONArray getUsers(JSONArray array) throws InterruptedException {
+        JSONArray Users = new JSONArray();
 
-        for (int i = 0; i < len; i++) {
+        for (int i = 0; i < array.length(); i++) {
 
-            // РџСЂРѕРІРµСЂРєР° РЅР° Р·Р°Р±Р°РЅРµРЅРЅРѕСЃС‚СЊ
-            boolean is_deactivated = array.get(i).getAsJsonObject().has("deactivated");
+            // Проверка на забаненность
+            boolean is_deactivated = array.getJSONObject(i).has("deactivated");
 
             if (!is_deactivated) {
 
-                //РџСЂРѕРІРµСЂРєР° РЅР° Р·Р°РєСЂС‹С‚РѕСЃС‚СЊ
-                boolean is_closed = array.get(i).getAsJsonObject().get("is_closed").getAsBoolean();
+                //Проверка на закрытость
+                boolean is_closed = array.getJSONObject(i).getBoolean("is_closed");
 
                 if (!is_closed) {
-                    JsonObject user = array.get(i).getAsJsonObject();
-                    JsonArray friends = getFriends(user.get("id").getAsInt());
+                    JSONObject user = array.getJSONObject(i);
+                    JSONArray friends = getFriends(user.getInt("id"));
 
-                    if (friends.size()!=0) {
+                    if (friends.length()>0 && friends.length()<1000) {
                         user.remove("is_closed");
                         user.remove("can_access_closed");
                         user.remove("track_code");
 
-                        user.add("friends", getFriends(user.get("id").getAsInt()));
-                        Users.add(array.get(i).getAsJsonObject());
+                        user.put("friends", friends);
+                        Users.put(array.get(i));
                     }
                 }
             }
@@ -79,7 +81,7 @@ public class parser {
         return Users;
     }
 
-    private static JsonObject getUserInfo(int id) throws InterruptedException {
+    private static JSONObject getUserInfo(int id) throws InterruptedException {
         Thread.sleep(350);
         ClientResponse user_response = null;
         try {
@@ -90,26 +92,28 @@ public class parser {
         } catch (ClientException e) {
             e.printStackTrace();
         }
-        JsonObject converted = new JsonParser().parse(user_response.getContent()).getAsJsonObject();
-        JsonObject user = converted.getAsJsonArray("response").get(0).getAsJsonObject();
+        assert user_response != null;
+        JSONObject converted = new JSONObject(user_response.getContent());
+        JSONObject user = converted.getJSONArray("response").getJSONObject(0);
 
         boolean is_deactivated = user.has("deactivated");
         if (!is_deactivated) {
-            boolean is_closed = user.get("is_closed").getAsBoolean();
+            boolean is_closed = user.getBoolean("is_closed");
             if (!is_closed) {
 
-                JsonArray friends_arr = getFriends(user.get("id").getAsInt());
-
-                user.add("friends", friends_arr);
-                user.remove("is_closed");
-                user.remove("can_access_closed");
-                return user;
+                JSONArray friends_arr = getFriends(user.getInt("id"));
+                if (friends_arr.length()>0 && friends_arr.length()<1000) {
+                    user.put("friends", friends_arr);
+                    user.remove("is_closed");
+                    user.remove("can_access_closed");
+                    return user;
+                }
             }
         }
         return null;
     }
 
-    private static JsonArray search(int number, String param, String value) throws ClientException {
+    private static JSONArray search(int number, String param, String value) throws ClientException {
         ClientResponse search_resp = null;
         switch (param) {
             case ("country"):
@@ -117,10 +121,13 @@ public class parser {
                 break;
             case ("city"):
                 ClientResponse response = vk.database().getCities(APP, 1).q(value).executeAsRaw();
-                JsonObject City_parse = new JsonParser().parse(response.getContent()).getAsJsonObject();
-                JsonObject arr = City_parse.getAsJsonObject("response").getAsJsonArray("items").get(0).getAsJsonObject();
-                JsonElement id = arr.get("id");
-                search_resp = vk.users().search(APP).fields(userFieldList).city(Integer.valueOf(value)).count(number).executeAsRaw();
+                System.out.println(value);
+                JSONObject City_parse = new JSONObject(response.getContent());
+                System.out.println(City_parse);
+                JSONObject arr = City_parse.getJSONObject("response").getJSONArray("items").getJSONObject(0);
+                int id = arr.getInt("id");
+                System.out.println(id);
+                search_resp = vk.users().search(APP).fields(userFieldList).city(id).count(number).executeAsRaw();
                 break;
             case ("university"):
                 search_resp = vk.users().search(APP).fields(userFieldList).university(Integer.valueOf(value)).count(number).executeAsRaw();
@@ -138,55 +145,52 @@ public class parser {
                 break;
         }
 
-        JsonObject response = new JsonParser().parse(search_resp.getContent()).getAsJsonObject();
-        JsonArray users_arr = response.getAsJsonObject("response").getAsJsonArray("items");
-        return users_arr;
+        JSONObject response = new JSONObject(search_resp.getContent());
+        return response.getJSONObject("response").getJSONArray("items");
     }
 
     public static void main(String[] args) throws InterruptedException {
         ////////////////////////////////////////////////
 
-        ArrayList<JsonObject> result = new ArrayList<>();
+        JSONArray result = new JSONArray();
 
-        JsonArray searching_people = null;
+        JSONArray searching_people = null;
         try {
-            searching_people = search(50, "country", "1");
+            searching_people = search(1, "city", "Барнаул");
         } catch (ClientException e) {
             e.printStackTrace();
         }
         assert searching_people != null;
-        JsonArray first_iter = getUsers(searching_people);
+        JSONArray first_iter = getUsers(searching_people);
 
-        for (JsonElement jsonElements : first_iter) {
-            result.add(jsonElements.getAsJsonObject());
+        for (int i=0;i<first_iter.length();i++) {
+            result.put(first_iter.getJSONObject(i));
         }
 
-        System.out.println(first_iter.size());
+        System.out.println(first_iter.length());
 
 
         if (first_iter != null) {
-            int len = first_iter.size();
+            int len = first_iter.length();
 
             for (int i = 0; i < len; i++) {
                 {
-                    JsonElement friends1 = first_iter.get(i).getAsJsonObject().get("friends");
-                    Type listType = new TypeToken<List<Integer>>() {
-                    }.getType();
-                    List<Integer> yourList = new Gson().fromJson(friends1, listType);
-                    for (int user_id : yourList) {
-                        JsonObject user = getUserInfo(user_id);
+                    JSONArray friends1 = first_iter.getJSONObject(i).getJSONArray("friends");
+
+                    for (int j=0;j<friends1.length();j++) {
+                        JSONObject user = getUserInfo(friends1.getInt(j));
                         if (user != null)
-                            result.add(user);
+                            result.put(user);
                     }
                 }
             }
 
         }
 
-        for (JsonObject res : result) {
-            System.out.println(res);
+        for (int i=0;i<result.length();i++) {
+            System.out.println(result.get(i));
         }
-        System.out.println(result.size());
+        System.out.println(result.length());
     }
 }
 
