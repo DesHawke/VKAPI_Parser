@@ -1,17 +1,13 @@
-//import com.google.gson.*;
-//import com.google.gson.reflect.TypeToken;
 import com.vk.api.sdk.client.ClientResponse;
 import com.vk.api.sdk.client.TransportClient;
 import com.vk.api.sdk.client.VkApiClient;
 import com.vk.api.sdk.client.actors.UserActor;
 import com.vk.api.sdk.exceptions.ClientException;
 import com.vk.api.sdk.httpclient.HttpTransportClient;
-import com.vk.api.sdk.objects.enums.UsersSort;
 import com.vk.api.sdk.objects.users.Fields;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.lang.reflect.Type;
 import java.util.*;
 
 
@@ -55,12 +51,12 @@ public class parser {
 
         for (int i = 0; i < array.length(); i++) {
 
-            // �������� �� ������������
+            // Проверка на забаненность
             boolean is_deactivated = array.getJSONObject(i).has("deactivated");
 
             if (!is_deactivated) {
 
-                //�������� �� ����������
+                //Проверка на закрытость
                 boolean is_closed = array.getJSONObject(i).getBoolean("is_closed");
 
                 if (!is_closed) {
@@ -115,48 +111,81 @@ public class parser {
 
     private static JSONArray search(int number, String param, String value) throws ClientException {
         ClientResponse search_resp = null;
+        Scanner in = new Scanner(System.in);
+        ClientResponse response;
+
         switch (param) {
-            case ("country"):
-                search_resp = vk.users().search(APP).fields(userFieldList).country(Integer.valueOf(value)).sort(UsersSort.BY_DATE_REGISTERED).count(number).executeAsRaw();
-                break;
             case ("city"):
-                ClientResponse response = vk.database().getCities(APP, 1).q(value).executeAsRaw();
-                System.out.println(value);
+                // Наиболее вероятный город
+                response = vk.database().getCities(APP, 1).q(value).executeAsRaw();
                 JSONObject City_parse = new JSONObject(response.getContent());
-                System.out.println(City_parse);
                 JSONObject arr = City_parse.getJSONObject("response").getJSONArray("items").getJSONObject(0);
-                int id = arr.getInt("id");
-                System.out.println(id);
-                search_resp = vk.users().search(APP).fields(userFieldList).city(id).count(number).executeAsRaw();
+
+                int city_id = arr.getInt("id");
+                search_resp = vk.users().search(APP).fields(userFieldList).city(city_id).count(number).executeAsRaw();
                 break;
+
             case ("university"):
-                search_resp = vk.users().search(APP).fields(userFieldList).university(Integer.valueOf(value)).count(number).executeAsRaw();
+                response = vk.database().getUniversities(APP).q(value).count(5).executeAsRaw();
+                JSONObject uni_parse = new JSONObject(response.getContent());
+                JSONArray array = uni_parse.getJSONObject("response").getJSONArray("items");
+
+                System.out.println("Выберите нужный университет по ID:");
+
+                for (int i=0;i<array.length();i++) {
+                    System.out.println("ID " + array.getJSONObject(i).get("id") + "\t" +array.getJSONObject(i).get("title"));
+                }
+                int uni_id = in.nextInt();
+                search_resp = vk.users().search(APP).fields(userFieldList).university(uni_id).executeAsRaw();
                 break;
-            case ("birth_year"):
-                search_resp = vk.users().search(APP).fields(userFieldList).birthYear(Integer.valueOf(value)).count(number).executeAsRaw();
-                break;
+
             case ("school"):
-                search_resp = vk.users().search(APP).fields(userFieldList).school(Integer.valueOf(value)).count(number).executeAsRaw();
-                break;
-            case ("group_id"):
-                search_resp = vk.users().search(APP).fields(userFieldList).groupId(Integer.valueOf(value)).count(number).executeAsRaw();
+                System.out.println("Выберите город:");
+                String name=in.nextLine();
+                ClientResponse city_response = vk.database().getCities(APP, 1).q(name).executeAsRaw();
+                JSONObject city_school = new JSONObject(city_response.getContent());
+                JSONObject city_school_arr = city_school.getJSONObject("response").getJSONArray("items").getJSONObject(0);
+
+                int city_school_id = city_school_arr.getInt("id");
+                response = vk.database().getSchools(APP, city_school_id).q(value).count(5).executeAsRaw();
+                JSONObject school_parse = new JSONObject(response.getContent());
+                JSONArray school_array = school_parse.getJSONObject("response").getJSONArray("items");
+
+                System.out.println("Выберите нужную школу по ID:");
+                for (int i=0;i<school_array.length();i++) {
+                    System.out.println("ID " + school_array.getJSONObject(i).get("id") + "\t" +school_array.getJSONObject(i).get("title"));
+                }
+                int school_id = in.nextInt();
+                search_resp = vk.users().search(APP).fields(userFieldList).school(school_id).count(number).executeAsRaw();
                 break;
             default:
                 break;
         }
 
-        JSONObject response = new JSONObject(search_resp.getContent());
-        return response.getJSONObject("response").getJSONArray("items");
+        JSONObject obj = new JSONObject(search_resp.getContent());
+        return obj.getJSONObject("response").getJSONArray("items");
     }
 
     public static void main(String[] args) throws InterruptedException {
-        ////////////////////////////////////////////////
+
 
         JSONArray result = new JSONArray();
 
+        //Входные данные
+        String param;
+        String value;
+        int number=1;
+
+        // ! ПРОБЛЕМЫ С РУССКОЙ КОДИРОВКОЙ !
+        Scanner in = new Scanner(System.in);
+        System.out.println("Введите параметр: ");
+        param = in.nextLine();
+        System.out.println("Input a value: ");
+        value = in.nextLine();
+
         JSONArray searching_people = null;
         try {
-            searching_people = search(1, "city", "�������");
+            searching_people = search(number, param, value);
         } catch (ClientException e) {
             e.printStackTrace();
         }
@@ -166,8 +195,6 @@ public class parser {
         for (int i=0;i<first_iter.length();i++) {
             result.put(first_iter.getJSONObject(i));
         }
-
-        System.out.println(first_iter.length());
 
 
         if (first_iter != null) {
