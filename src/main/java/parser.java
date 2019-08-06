@@ -2,6 +2,7 @@ import com.vk.api.sdk.client.ClientResponse;
 import com.vk.api.sdk.client.TransportClient;
 import com.vk.api.sdk.client.VkApiClient;
 import com.vk.api.sdk.client.actors.UserActor;
+import com.vk.api.sdk.actions.Execute;
 import com.vk.api.sdk.exceptions.ClientException;
 import com.vk.api.sdk.httpclient.HttpTransportClient;
 import com.vk.api.sdk.objects.users.Fields;
@@ -29,91 +30,54 @@ public class parser {
             Fields.UNIVERSITIES,
             Fields.SCHOOLS);
 
-    private static JSONArray getFriends(int id) throws InterruptedException {
-        Thread.sleep(350);
-        ClientResponse friends_resp = null;
-        try {
-            friends_resp = vk.friends().get(APP)
-                    .userId(id)
-                    .executeAsRaw();
-        } catch (ClientException e) {
-            e.printStackTrace();
-        }
-        assert friends_resp != null;
-        JSONObject friends = new JSONObject(friends_resp.getContent());
-        //System.out.println(friends);
-        return friends.getJSONObject("response").getJSONArray("items");
+    private static JSONObject getUser(int user_id) throws ClientException, InterruptedException {
+        String code=
+                "var info= API.users.get({\"user_ids\":" + user_id + ",\"fields\": \"sex, city, country, photo_50,last_seen,universities,school\"});" +
+                "var is_deactivated=info@.is_deactivated;"+
+                "if(is_deactivated!=null){"+
+                    "var is_closed=info@.is_closed;"+
+                    "if(is_closed){"+
+                        "var friends=API.friends.get({\"user_id\":" + user_id + "});"+
+                        "if(friends.count>0 && friends.count<1000){"+
+                            "var result={id:info[0].id,"+
+                                        "first_name:info[0].first_name,"+
+                                        "last_name:info[0].last_name,"+
+                                        "sex:info[0].sex,"+
+                                        "city:info[0].city,"+
+                                        "country:info[0].country,"+
+                                        "photo_50:info[0].photo_50,"+
+                                        "last_seen:info[0].last_seen,"+
+                                        "universities:info[0].universities,"+
+                                        "schools:info[0].schools,"+
+                                        "friends:friends.items };"+
+                            "return result;}}}" +
+                        "else return null;";
 
+        Thread.sleep(350);
+        ClientResponse resp=vk.execute().code(APP,code).executeAsRaw();
+
+        JSONObject user = new JSONObject(resp.getContent());
+        if (!user.isNull("response")) {
+            return user.getJSONObject("response");
+        }
+        else return null;
     }
 
-    private static JSONArray getUsers(JSONArray array) throws InterruptedException {
-        JSONArray Users = new JSONArray();
-
-        for (int i = 0; i < array.length(); i++) {
-
-            // Проверка на забаненность
-            boolean is_deactivated = array.getJSONObject(i).has("deactivated");
-
-            if (!is_deactivated) {
-
-                //Проверка на закрытость
-                boolean is_closed = array.getJSONObject(i).getBoolean("is_closed");
-
-                if (!is_closed) {
-                    JSONObject user = array.getJSONObject(i);
-                    JSONArray friends = getFriends(user.getInt("id"));
-
-                    if (friends.length()>0 && friends.length()<1000) {
-                        user.remove("is_closed");
-                        user.remove("can_access_closed");
-                        user.remove("track_code");
-
-                        user.put("friends", friends);
-                        Users.put(array.get(i));
-                    }
-                }
-            }
+    private static JSONArray getUsersArr(JSONArray users) throws ClientException, InterruptedException {
+        JSONArray result=new JSONArray();
+        for (int i=0;i<users.length();i++) {
+            JSONObject user = getUser(users.getInt(i));
+            if (user!=null)
+                result.put(user);
         }
-        return Users;
-    }
-
-    private static JSONObject getUserInfo(int id) throws InterruptedException {
-        Thread.sleep(350);
-        ClientResponse user_response = null;
-        try {
-            user_response = vk.users().get(APP)
-                    .userIds(Integer.toString(id))
-                    .fields(userFieldList)
-                    .executeAsRaw();
-        } catch (ClientException e) {
-            e.printStackTrace();
-        }
-        assert user_response != null;
-        JSONObject converted = new JSONObject(user_response.getContent());
-        JSONObject user = converted.getJSONArray("response").getJSONObject(0);
-
-        boolean is_deactivated = user.has("deactivated");
-        if (!is_deactivated) {
-            boolean is_closed = user.getBoolean("is_closed");
-            if (!is_closed) {
-
-                JSONArray friends_arr = getFriends(user.getInt("id"));
-                if (friends_arr.length()>0 && friends_arr.length()<1000) {
-                    user.put("friends", friends_arr);
-                    user.remove("is_closed");
-                    user.remove("can_access_closed");
-                    return user;
-                }
-            }
-        }
-        return null;
+        return result;
     }
 
     private static JSONArray search(int number, String param, String value) throws ClientException {
         ClientResponse search_resp = null;
         Scanner in = new Scanner(System.in);
         ClientResponse response;
-
+        String code;
         switch (param) {
             case ("city"):
                 // Наиболее вероятный город
@@ -122,7 +86,9 @@ public class parser {
                 JSONObject arr = City_parse.getJSONObject("response").getJSONArray("items").getJSONObject(0);
 
                 int city_id = arr.getInt("id");
-                search_resp = vk.users().search(APP).fields(userFieldList).city(city_id).count(number).executeAsRaw();
+                code="var result= API.users.search({\"city\":"+city_id+",\"count\":"+number+"});\n" +
+                        "return result.items@.id;";
+                search_resp=vk.execute().code(APP,code).executeAsRaw();
                 break;
 
             case ("university"):
@@ -136,7 +102,9 @@ public class parser {
                     System.out.println("ID " + array.getJSONObject(i).get("id") + "\t" +array.getJSONObject(i).get("title"));
                 }
                 int uni_id = in.nextInt();
-                search_resp = vk.users().search(APP).fields(userFieldList).university(uni_id).executeAsRaw();
+                code="var result= API.users.search({\"university\":"+uni_id+",\"count\":"+number+"});\n" +
+                        "return result.items@.id;";
+                search_resp=vk.execute().code(APP,code).executeAsRaw();
                 break;
 
             case ("school"):
@@ -156,25 +124,26 @@ public class parser {
                     System.out.println("ID " + school_array.getJSONObject(i).get("id") + "\t" +school_array.getJSONObject(i).get("title"));
                 }
                 int school_id = in.nextInt();
-                search_resp = vk.users().search(APP).fields(userFieldList).school(school_id).count(number).executeAsRaw();
+                code="var result= API.users.search({\"school\":"+school_id+",\"count\":"+number+"});\n" +
+                        "return result.items@.id;";
+                search_resp=vk.execute().code(APP,code).executeAsRaw();
                 break;
             default:
                 break;
         }
 
         JSONObject obj = new JSONObject(search_resp.getContent());
-        return obj.getJSONObject("response").getJSONArray("items");
+        return obj.getJSONArray("response");
     }
 
-    public static void main(String[] args) throws InterruptedException {
-
+    public static void main(String[] args) throws InterruptedException, ClientException {
 
         JSONArray result = new JSONArray();
 
         //Входные данные
         String param;
         String value;
-        int number=1;
+        int number=20;
 
         // ! ПРОБЛЕМЫ С РУССКОЙ КОДИРОВКОЙ !
         Scanner in = new Scanner(System.in);
@@ -189,31 +158,22 @@ public class parser {
         } catch (ClientException e) {
             e.printStackTrace();
         }
-        assert searching_people != null;
-        JSONArray first_iter = getUsers(searching_people);
+
+        JSONArray first_iter=getUsersArr(searching_people);
 
         for (int i=0;i<first_iter.length();i++) {
             result.put(first_iter.getJSONObject(i));
         }
 
+        int len = first_iter.length();
 
-        if (first_iter != null) {
-            int len = first_iter.length();
-
-            for (int i = 0; i < len; i++) {
-                {
-                    JSONArray friends1 = first_iter.getJSONObject(i).getJSONArray("friends");
-
-                    for (int j=0;j<friends1.length();j++) {
-                        JSONObject user = getUserInfo(friends1.getInt(j));
-                        if (user != null)
-                            result.put(user);
-                    }
-                }
+        for (int i = 0; i < len; i++) {
+            JSONArray friends_list = first_iter.getJSONObject(i).getJSONArray("friends");
+            JSONArray second_iter=(getUsersArr(friends_list));
+            for (int j=0;j<second_iter.length();j++) {
+                result.put(second_iter.getJSONObject(j));
             }
-
         }
-
         for (int i=0;i<result.length();i++) {
             System.out.println(result.get(i));
         }
