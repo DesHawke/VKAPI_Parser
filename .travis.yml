@@ -2,6 +2,5 @@ language: java
 install: true
 jdk:
   - oraclejdk8
-os: windows
 script:
   - ./gradlew build
